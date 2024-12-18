@@ -220,7 +220,7 @@ ggplot(filtered_df, aes(x = years_after, y = authority_score, linetype = case_id
 # Create year range and initialize storage lists
 year_range <- 1799:2002
 
-# Fig 6
+# Fig 10 ids
 fig10_ids <- c("18501", "23115", "23601", "26918")
 
 subsets <- list()
