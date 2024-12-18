@@ -390,5 +390,62 @@ cases_of_interest_testing <- cases_of_interest_testing %>%
 
 head(cases_of_interest_testing)
 
+## Testing
 
+library(testthat)
                                                      
+# Filter df for the Figure 6 cases
+filtered_df <- authority_scores_df[authority_scores_df$case_id %in% fig6_ids, ]
+
+# Authmat subset to compare with Figure 6
+caseids_test <- c(21109, 25347)
+years_test <- which(colnames(authmat) == "X1954"):which(colnames(authmat) == "X2002")
+
+authmat_test <- authmat[authmat[, 1] %in% caseids_test, c(1, years_test)]
+
+print(authmat_test)
+
+# Ensure years in authmat_test columns are properly formatted
+colnames(authmat_test) <- as.numeric(gsub("^X", "", colnames(authmat_test)))
+
+# Define a function to test matching authority scores
+test_that("Authority scores match up to 3 decimal places, skipping NA values", {
+  
+  # Loop through each row of filtered_df to check authority scores
+  for (i in 1:nrow(filtered_df)) {
+    year <- filtered_df$year[i]
+    case_id <- filtered_df$case_id[i]
+    auth_score <- filtered_df$authority_score[i]
+    
+    # Skip rows with NA authority scores
+    if (is.na(auth_score)) {
+      next
+    }
+    
+    # Find the matching column in authmat_test for the year
+    year_col <- which(colnames(authmat_test) == as.character(year))
+    
+    # Check if year or case_id is invalid and skip
+    if (length(year_col) == 0 || is.na(year_col)) {
+      next
+    }
+    case_row <- which(rownames(authmat_test) == as.character(case_id))
+    if (length(case_row) == 0 || is.na(case_row)) {
+      next
+    }
+    
+    # Check if the corresponding cell in authmat_test is NA and skip
+    if (is.na(authmat_test[case_row, year_col])) {
+      next
+    }
+    
+    # Perform the test with tolerance for 3 decimal places
+    expect_equal(
+      authmat_test[case_row, year_col],
+      auth_score,
+      tolerance = 1e-3,
+      info = paste("Mismatch at case_id:", case_id, "year:", year)
+    )
+  }
+})
+
