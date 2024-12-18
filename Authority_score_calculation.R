@@ -176,3 +176,126 @@ for (yr in rev(year_range)) {
     print(normalized_authority_complete[fig6_ids])
   }
 }
+
+# Combine authority scores into a data frame for plotting
+authority_scores_df <- do.call(rbind, lapply(names(authority_scores_by_year), function(year) {
+  scores <- authority_scores_by_year[[year]]
+  data.frame(
+    year = as.numeric(year),
+    case_id = names(scores),
+    authority_score = scores
+  )
+}))
+
+# Filter for the specific case IDs of interest
+filtered_df <- authority_scores_df[authority_scores_df$case_id %in% fig6_ids, ]
+
+# Adjust the years after decision
+years_since_decision <- list("25347" = 1973, "21109" = 1954)
+filtered_df$years_after <- filtered_df$year - sapply(filtered_df$case_id, function(id) years_since_decision[[id]])
+
+# Plot authority scores over time
+ggplot(filtered_df, aes(x = years_after, y = authority_score, linetype = case_id)) +
+  geom_line() +
+  labs(
+    title = "",
+    x = "Years After Decision",
+    y = "Authority Score"
+  ) +
+  annotate("text", x = 2, y = 0.06, label = "Roe v. Wade,\n310 U.S. 113 (1973)", fontface = "italic", hjust = 0) +
+  annotate("text", x = 11, y = 0.02, label = "Brown v. Board of Education,\n347 U.S. 483 (1954)", fontface = "italic", hjust = 0) +
+  scale_linetype_manual(values = c("25347" = "solid", "21109" = "dashed")) +
+  scale_x_continuous(breaks = seq(0, 30, by = 5),
+                     limits = c(0, 30)) +
+  scale_y_continuous(limits = c(0, 0.065)) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    panel.border = element_rect(
+    color = "black", fill = NA)
+    )
+
+## Figure 10
+
+# Create year range and initialize storage lists
+year_range <- 1799:2002
+
+# Fig 6
+fig10_ids <- c("18501", "23115", "23601", "26918")
+
+subsets <- list()
+authority_scores_by_year <- list()
+
+# Process each year in reverse
+for (yr in rev(year_range)) {
+  # Subset data for years within the range
+  subsets[[as.character(yr)]] <- subset(allcites_with_years, year1 >= 1799 & year1 <= yr)
+  complete_subsets <- subsets[[as.character(yr)]]
+
+  # Create graph for the full network
+  nodes_complete <- unique(c(complete_subsets$V1, complete_subsets$V2))
+  vertices <- data.frame(name = nodes_complete)
+  g_complete <- graph_from_data_frame(complete_subsets, directed = TRUE, vertices = vertices)
+
+  # Run HITS algorithm
+  hits_result_complete <- authority_score(g_complete)
+
+  # Authority scores
+  authority_scores_complete <- hits_result_complete$vector
+
+  # Normalize authority scores
+  normalized_authority_complete <- authority_scores_complete / sqrt(sum(authority_scores_complete^2, na.rm = TRUE))
+
+  # Store scores for the year
+  authority_scores_by_year[[as.character(yr)]] <- normalized_authority_complete
+
+  # Display specific case IDs' authority scores for the year
+  if (all(fig10_ids %in% names(normalized_authority_complete))) {
+    cat(sprintf("\nYear: %d\n", yr))
+    print(normalized_authority_complete[fig10_ids])
+  }
+}
+
+# Combine authority scores into a data frame for plotting
+authority_scores_df <- do.call(rbind, lapply(names(authority_scores_by_year), function(year) {
+  scores <- authority_scores_by_year[[year]]
+  data.frame(
+    year = as.numeric(year),
+    case_id = names(scores),
+    authority_score = scores
+  )
+}))
+
+# Filter for the specific case IDs of interest
+filtered_df_10 <- authority_scores_df[authority_scores_df$case_id %in% fig10_ids, ]
+
+# Plot authority scores over time
+ggplot(filtered_df_10, aes(x = year, y = authority_score, linetype = case_id)) +
+  geom_line() +
+  labs(
+    title = "",
+    x = "Year",
+    y = "Authority Score"
+  ) +
+  annotate("text", x = 1945, y = 0.04, label = "Brown v. Mississippi,\n297 U.S. 278 (1936)",
+           fontface = "italic", hjust = 0) +
+  annotate("text", x = 1985, y = 0.05, label = "Miranda v. Arizona,\n384 U.S. 436 (1966)",
+           fontface = "italic", hjust = 0) +
+  annotate("text", x = 1973, y = 0.02, label = "Escobedo v. Illinois,\n378 U.S. 478 (1964)",
+           fontface = "italic", hjust = 0) +
+  annotate("text", x = 1984, y = 0.01, label = "Rhode Island v. Innis,\n446 U.S. 291 (1980)",
+           fontface = "italic", hjust = 0) +
+  labs(
+    x = "Year",
+    y = "Authority Score",
+    title = "5th Amendment"
+  ) +
+  scale_linetype_manual(values = c("18501" = "dotted", "23115" = "dashed",
+                                   "23601" = "solid", "26918" = "dotdash")) +
+  scale_x_continuous(breaks = seq(1940, 2000, by = 10), limits = c(1940, 2000)) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    panel.border = element_rect(
+    color = "black", fill = NA)
+    )
