@@ -299,3 +299,96 @@ ggplot(filtered_df_10, aes(x = year, y = authority_score, linetype = case_id)) +
     panel.border = element_rect(
     color = "black", fill = NA)
     )
+
+
+
+##########################################################
+######## Authority score testing by Using testthat
+##########################################################
+
+# create case_year_map 
+case_year_map <- setNames(judicial$year, judicial$caseid)
+
+# define function: from case_year_map, filter only the data up to a specific year
+subset_allcites_year <- function(allcites, yr) {
+  V1_year <- case_year_map[as.character(allcites$V1)]
+  valid_rows <- !is.na(V1_year) & V1_year <= yr
+  return(allcites[valid_rows, ])
+}
+
+# Initialize year variables
+start_year <- 1799
+end_year <- 2002
+
+# Initialize result storage lists
+authority_scores_by_year <- list()
+hub_scores_by_year <- list()
+
+# Process data by year
+for (yr in seq(end_year, start_year, by = -1)) {
+  # Filter data by year
+  allcites_subset <- subset_allcites_year(allcites, yr)
+  
+  # Define nodes
+  nodes_complete <- unique(c(allcites_subset$V1, allcites_subset$V2))
+  
+  # Create the graph
+  g_complete <- graph_from_data_frame(allcites_subset, directed = TRUE, vertices = data.frame(name = nodes_complete))
+  
+  # Run the HITS algorithm
+  hits_result_complete <- hits_scores(g_complete)
+  
+  # Calculate Authority and Hub scores
+  authority_scores_complete <- hits_result_complete$authority
+  hub_scores_complete <- hits_result_complete$hub
+  
+  # Normalize scores
+  normalized_authority_complete <- authority_scores_complete / sqrt(sum(authority_scores_complete^2))
+  normalized_hub_complete <- hub_scores_complete / sqrt(sum(hub_scores_complete^2))
+  
+  # Store results by year
+  authority_scores_by_year[[as.character(yr)]] <- normalized_authority_complete
+  hub_scores_by_year[[as.character(yr)]] <- normalized_hub_complete
+}
+
+# Convert Authority scores to a data frame
+auth_df <- data.frame()
+hub_df <- data.frame()
+
+for (yr in names(authority_scores_by_year)) {
+  year_auth_scores <- data.frame(
+    year = as.numeric(yr),
+    caseid = names(authority_scores_by_year[[yr]]),
+    authority_score = authority_scores_by_year[[yr]]
+  )
+  auth_df <- rbind(auth_df, year_auth_scores)
+
+  year_hub_scores <- data.frame(
+    year = as.numeric(yr),
+    caseid = names(hub_scores_by_year[[yr]]),
+    hub_score = hub_scores_by_year[[yr]]
+  )
+  hub_df <- rbind(hub_df, year_hub_scores)
+}
+
+# Output Authority scores for cases of interest                                                     
+cases_of_interest_testing <- auth_df %>%
+  filter(caseid %in% c(21109, 25347)) %>%
+  mutate(
+    years_after_decision = ifelse(caseid == 21109, year - 1954, year - 1973),
+    case_name = case_when(
+      caseid == 21109 ~ "Brown v. Board of Education, 347 U.S. 483 (1954)",
+      caseid == 25347 ~ "Roe v. Wade, 310 U.S. 113 (1973)"
+    )
+  ) %>%
+  filter(!is.na(authority_score))
+
+cases_of_interest_testing <- cases_of_interest_testing %>%
+  group_by(caseid) %>%
+  mutate(years_after_decision = year - min(year)) %>%
+  ungroup()
+
+head(cases_of_interest_testing)
+
+
+                                                     
