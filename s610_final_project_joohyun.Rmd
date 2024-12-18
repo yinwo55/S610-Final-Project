@@ -1,0 +1,460 @@
+---
+title: "S610 Final Project"
+author: "Joohyun Kim"
+date: "2024-11-28"
+output: 
+  html_document:
+    latex_engine: xelatex
+    keep_tex: false
+    theme: journal
+    highlight: kate
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+#  pdf_document:
+#    latex_engine: xelatex
+#    toc: true
+#    dev: cairo_pdf
+always_allow_html: true
+urlcolor: blue
+# mainfont: cochineal
+# mainfont: sans-serif
+# sansfont: Fira Sans
+# monofont: Fira Code
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(igraph)
+library(tidygraph)
+library(ggraph)
+library(stringr)
+library(ggplot2)
+library(tidyr)
+library(zoo)
+
+```
+
+Each case: vertex or node
+Each citation: an arc
+  e.g. If case i cites case j, an arc exists from case i to case j.
+  
+outward citation: an arc from case i to case j for case i
+inward citation: for case j
+
+degree: the total number of arcs leading to and from each vertex
+outdegree: the number of outward citations
+indegree: the number of inward citations
+  e.g. Roe v. Wade had four inward citations and zero outward citations.
+
+authority scores: the degree to which a case is thought to be important for resolving other important issues.
+  e.g. landmark cases
+hub scores: the degree to which a case is well-grounded in previous important rulings.
+  e.g. help to test the rise and fall of precedent (reversed cases/ cases that overrule them)
+
+
+```{r}
+setwd("C:/Users/jhin9/judicial")
+allcites <- read.table("allcites.txt", header = FALSE, sep = " ")
+
+head(allcites)
+
+```
+
+
+```{r}
+setwd("C:/Users/jhin9/judicial")
+indegmat <- read.table("indegmat.txt", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+
+head(indegmat)
+
+```
+
+```{r}
+setwd("C:/Users/jhin9/judicial")
+outdegmat <- read.table("outdegmat.txt", header = TRUE, sep = ",", stringsAsFactors = FALSE)
+
+head(outdegmat)
+
+```
+
+
+## Figure 1
+
+# roe. case
+```{r}
+Roe_v_wade <- allcites[allcites$V2 == 25347, ]
+
+Roe_v_wade
+```
+
+```{r}
+setwd("C:/Users/jhin9/judicial")
+judicial <- read.csv("judicial.csv")
+
+head(judicial)
+  
+```
+
+
+# landmark cases
+```{r}
+abor_landmarks <- judicial %>%
+  filter(usid %in% c("492US490", "505US833", "476US747", "462US416", "410US113")
+  )
+
+abor_landmarks
+  
+```
+
+
+# combining roe. with landmark cases
+```{r}
+Roe_v_wade_landmarks <- allcites %>%
+  filter(V1 %in% c(27633, 28354, 29003, 29459), V2 %in% c(25347, 27633, 28354, 29003))
+
+Roe_v_wade_landmarks
+```
+
+
+# converting matrix into edge list
+```{r}
+edge_list <- Roe_v_wade_landmarks[, c("V1", "V2")]
+colnames(edge_list) <- c("outward", "inward")
+
+edge_list
+```
+
+
+# mapping nodes
+```{r}
+
+node_mapping <- data.frame(
+  name = unique(c(edge_list$outward, edge_list$inward)),
+  label = judicial$parties[match(unique(c(edge_list$outward, edge_list$inward)), judicial$caseid)]
+)
+
+graph <- graph_from_data_frame(d = edge_list, directed = TRUE)
+
+V(graph)$name <- node_mapping$label
+
+print(node_mapping)
+
+```
+
+
+# visualization
+```{r}
+V(graph)$label_wrapped <- str_wrap(node_mapping$label, width = 20)
+
+ggraph(graph, layout = "circle") +
+  geom_edge_link(arrow = arrow(length = unit(4, "mm")), end_cap = circle(3, "mm"), alpha = 0.6) +
+  geom_node_point(size = 7, color = "grey") +
+  geom_node_text(aes(label = label_wrapped), repel = TRUE, size = 3) +
+  theme_void() +
+  ggtitle("Network of Selected Landmark Abortion Decisions")
+```
+
+
+
+## Fig. 2. Distribution of inward and outward citations in the precedent network.
+
+```{r}
+indegree_freq <- judicial %>%
+  count(indeg, name = "freq")
+
+indeg_plot <- ggplot(indegree_freq, aes(x = indeg, y = freq)) +
+  geom_point(shape = 1, size = 2) +
+  scale_x_log10() +
+  scale_y_log10() +
+  labs(title = "Log-log plot of Inward Citations",
+       x = "Inward Citations",
+       y = "Number of Cases") +
+  theme_minimal()
+
+print(indeg_plot)
+```
+
+
+
+```{r}
+outdegree_freq <- judicial %>%
+  count(outdeg, name = "freq")
+
+outdeg_plot <- ggplot(outdegree_freq, aes(x = outdeg, y = freq)) +
+  geom_point(shape = 1, size = 2) +
+  scale_x_log10() +
+  scale_y_log10() +
+  labs(title = "Log-log plot of Outward Citations",
+       x = "Outward Citations",
+       y = "Number of Cases") +
+  theme_minimal()
+
+print(outdeg_plot)
+```
+
+
+## Fig. 3. Mean inward and outward citations by year
+
+```{r}
+mean_citations <- judicial %>%
+  group_by(year) %>%
+  summarize(
+    mean_indeg = mean(indeg, na.rm = TRUE),
+    mean_outdeg = mean(outdeg, na.rm = TRUE)
+  )
+
+
+in_mean_plot <- ggplot(mean_citations, aes(x = year, y = mean_indeg)) +
+  geom_point(shape = 1) +
+  labs(y = "Inward Cications", x = "Year") +
+  theme_minimal() 
+
+out_mean_plot <- ggplot(mean_citations, aes(x = year, y = mean_outdeg)) +
+  geom_point(shape = 1) +
+  labs(y = "Outward Cications", x = "Year") +
+  theme_minimal()
+
+
+#library(gridExtra)
+#grid.arrange(in_mean_plot, out_mean_plot, ncol = 1)
+
+#library(patchwork)
+in_mean_plot + out_mean_plot +
+  plot_layout(ncol = 1) &
+  theme(
+    axis.text.y = element_text(size = 3),
+    axis.text.x = element_text(size = 10)
+  )
+
+```
+
+
+
+## Fig. 4. Percentage of cases with at least one outward citation by year
+
+```{r}
+percent_outward <- judicial %>%
+  group_by(year) %>%
+  summarize(
+    total_cases = n(),
+    cases_w_outdeg = sum(outdeg > 0),
+    percentage = (cases_w_outdeg / total_cases) * 100
+  )
+
+percent_plot <- ggplot(percent_outward, aes(x = year, y = percentage)) +
+  geom_point(shape = 1) +
+  labs(
+    title = "Percentage of Cases with At Least One Outward Citation by Year",
+    x = "Year",
+    y = "Percentage (%)"
+  ) +
+  theme_minimal()
+
+print(percent_plot)
+```
+
+
+
+## Fig. 6. Rise of Brown and Roe.
+
+# Authority scores 
+
+```{r}
+# create case_year_map 
+case_year_map <- setNames(judicial$year, judicial$caseid)
+
+# define function: from case_year_map, filter only the data up to a specific year
+subset_allcites_year <- function(allcites, yr) {
+  V1_year <- case_year_map[as.character(allcites$V1)]
+  valid_rows <- !is.na(V1_year) & V1_year <= yr
+  return(allcites[valid_rows, ])
+}
+
+# Initialize year variables
+start_year <- 1799
+end_year <- 2002
+
+# Initialize result storage lists
+authority_scores_by_year <- list()
+hub_scores_by_year <- list()
+
+# Process data by year
+for (yr in seq(end_year, start_year, by = -1)) {
+  # Filter data by year
+  allcites_subset <- subset_allcites_year(allcites, yr)
+  
+  # Define nodes
+  nodes_complete <- unique(c(allcites_subset$V1, allcites_subset$V2))
+  
+  # Create the graph
+  g_complete <- graph_from_data_frame(allcites_subset, directed = TRUE, vertices = data.frame(name = nodes_complete))
+  
+  # Run the HITS algorithm
+  hits_result_complete <- hits_scores(g_complete)
+  
+  # Calculate Authority and Hub scores
+  authority_scores_complete <- hits_result_complete$authority
+  hub_scores_complete <- hits_result_complete$hub
+  
+  # Normalize scores
+  normalized_authority_complete <- authority_scores_complete / sqrt(sum(authority_scores_complete^2))
+  normalized_hub_complete <- hub_scores_complete / sqrt(sum(hub_scores_complete^2))
+  
+  # Store results by year
+  authority_scores_by_year[[as.character(yr)]] <- normalized_authority_complete
+  hub_scores_by_year[[as.character(yr)]] <- normalized_hub_complete
+}
+
+# Convert Authority scores to a data frame
+auth_df <- data.frame()
+hub_df <- data.frame()
+
+for (yr in names(authority_scores_by_year)) {
+  year_auth_scores <- data.frame(
+    year = as.numeric(yr),
+    caseid = names(authority_scores_by_year[[yr]]),
+    authority_score = authority_scores_by_year[[yr]]
+  )
+  auth_df <- rbind(auth_df, year_auth_scores)
+
+  year_hub_scores <- data.frame(
+    year = as.numeric(yr),
+    caseid = names(hub_scores_by_year[[yr]]),
+    hub_score = hub_scores_by_year[[yr]]
+  )
+  hub_df <- rbind(hub_df, year_hub_scores)
+}
+
+```
+
+
+# Roe. and Brown. data
+
+```{r}
+
+# Output Authority scores for cases of interest                                               
+roe_brown_auth <- auth_df %>%
+  filter(caseid %in% c(21109, 25347)) %>%
+  mutate(
+    years_after_decision = ifelse(caseid == 21109, year - 1954, year - 1973),
+    case_name = case_when(
+      caseid == 21109 ~ "Brown v. Board of Education, 347 U.S. 483 (1954)",
+      caseid == 25347 ~ "Roe v. Wade, 310 U.S. 113 (1973)"
+    )
+  ) %>%
+  filter(!is.na(authority_score))
+
+roe_brown_auth <- roe_brown_auth %>%
+  group_by(caseid) %>%
+  mutate(years_after_decision = year - min(year)) %>%
+  ungroup()
+
+head(roe_brown_auth)
+
+roe_data <- filter(roe_brown_auth, caseid == 21109)
+brown_data <- filter(roe_brown_auth, caseid == 25347)
+
+# visualize fig. 6
+ggplot() +
+  geom_line(
+    data = roe_data,
+    aes(x = years_after_decision, y = authority_score),
+    linetype = "dashed") +
+  geom_line(data = brown_data,
+            aes(x = years_after_decision, y = authority_score),
+            linetype = "solid") +
+  annotate(
+    "text", x = 3, y = 0.05,
+    label = expression(italic("Roe v. Wade,\n310 U.S. 113 (1973)")),
+    hjust = 0, size = 3) +
+  annotate(
+    "text", x = 11, y = 0.02,
+    label = expression(italic("Brown v. Board of Education,\n347 U.S. 483 (1954)")),
+    hjust = 0, size = 3) +
+  labs(
+    x = "Years After Decision",
+    y = "Authority Score"
+  ) +
+  scale_x_continuous(breaks = seq(0, 30, by = 5),
+                     limits = c(0, 30)) +
+  scale_y_continuous(limits = c(0, 0.065)) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5),
+    panel.border = element_rect(
+      color = "black", fill = NA)
+  )
+
+  
+```
+
+
+
+## Fig. 10. The evolution of Firth Amendment case law.
+
+```{r}
+
+fifth_amendment <- auth_df %>%
+  filter(caseid %in% c(18501, 23601, 23115, 26918)) %>%
+  mutate(
+    case_name = case_when(
+      caseid == 18501 ~ "Brown v. Mississippi, 297 U.S. 278 (1936)",
+      caseid == 23115 ~ "Miranda v. Arizona, 384 U.S. 436 (1966)",
+      caseid == 23601 ~ "Escobedo v. Illinois, 378 U.S. 478 (1964)",
+      caseid == 26918 ~ "Rhode Island v. Innis. 446 U.S. 291 (1980)",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(authority_score))
+
+brown_mississippi <- filter(fifth_amendment, caseid == 18501)
+miranda <- filter(fifth_amendment, caseid == 23115)
+escobedo <- filter(fifth_amendment, caseid == 23601)
+rhode_innis <- filter(fifth_amendment, caseid == 26918)
+
+
+ggplot() +
+  geom_line(data = brown_mississippi,
+            aes(x = year, y = authority_score),
+            linetype = "dotted") +
+  geom_line(data = miranda,
+            aes(x = year, y = authority_score),
+            linetype = "solid") +
+  geom_line(data = escobedo,
+            aes(x = year, y = authority_score),
+            linetype = "dashed") +
+  geom_line(data = rhode_innis,
+            aes(x = year, y = authority_score),
+            linetype = "dotdash") +
+  
+  annotate("text", x = 1940, y = 0.04, 
+           label = "Brown v. Mississippi, \n297 U.S. 278 (1936)", 
+           size = 3, hjust = 0) +
+  annotate("text", x = 1970, y = 0.06, 
+           label = "Miranda v. Arizona, \n384 U.S. 436 (1966)", 
+           size = 3, hjust = 0) +
+  annotate("text", x = 1975, y = 0.02, 
+           label = "Escobedo v. Illinois, \n378 U.S. 478 (1964)", 
+           size = 3, hjust = 0) +
+  annotate("text", x = 1990, y = 0.01, 
+           label = "Rhode Island v. Innis. \n446 U.S. 291 (1980)", 
+           size = 3, hjust = 0) +          
+  labs(
+    title = "5th Amendment",
+    x = "Year",
+    y = "Authority Score",
+  ) +
+  scale_x_continuous(breaks = seq(1940, 2000, 10), limits = c(1940, 2000)) +
+  scale_y_continuous(limits = c(0, 0.065)) +
+  
+  theme_classic() +
+  theme(
+    panel.border = element_rect(color = "black", fill = NA),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+```
+
