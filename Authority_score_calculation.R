@@ -22,7 +22,7 @@ judicial_path <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\
 indeg_path <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\Judicial\\indegmat.txt"
 outdeg_path <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\Judicial\\outdegmat.txt"
 
-allcite <- read.csv(allcite_path, header = FALSE, sep = " ")
+allcites <- read.csv(allcite_path, header = FALSE, sep = " ")
 judicial <- read.csv(judicial_path, header = TRUE, sep = ",")
 indeg <- read.csv(indeg_path, header = TRUE, sep = ",")
 outdeg <- read.csv(outdeg_path, header = TRUE, sep = ",")
@@ -39,7 +39,7 @@ outdeg <- read.csv(outdeg_path, header = TRUE, sep = ",")
 five_case_nodes <- c(25347, 27633, 28354, 29003, 29459)
 
 # Filter edges where both `V1` and `V2` belong to the five-case network
-Roe_v_wade_five <- allcite %>% 
+Roe_v_wade_five <- allcites %>% 
   filter(V1 %in% five_case_nodes, V2 %in% five_case_nodes)
 
 # Define edges from the filtered data
@@ -126,104 +126,51 @@ print(benchmark_results)
 ##########################################################
 
 
-# Extract all years
-years <- colnames(indeg)[-1]  # Exclude the first column (caseid)
+# merging year with allcites
+allcites_year <- merge(allcites, judicial[, c("caseid", "year")], 
+                 by.x = "V1", by.y = "caseid", all.x = TRUE)
 
-# Initialize a file for results
-output_file <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\authority_hub_scores_per_year.txt"
-write.csv(data.frame(), output_file, row.names = FALSE)  # Create an empty file
+allcites_year <- allcites_year[, c("year", "V1", "V2")]
 
-# Maximum size for submatrices
-max_matrix_size <- 200  # Adjust based on memory constraints
+head(allcites_year)
 
-# Function to process a submatrix
-process_submatrix <- function(indegree, outdegree) {
-  adj_matrix <- as(as.matrix(indegree) %*% t(as.matrix(outdegree)), "dgCMatrix")
-  
-  # Skip if adjacency matrix is empty
-  if (sum(adj_matrix) == 0) {
-    return(NULL)
-  }
-  
-  # Create the graph from sparse matrix
-  g <- graph_from_adjacency_matrix(adj_matrix, mode = "directed", weighted = NULL)
-  
-  # Apply HITS algorithm
-  hits_result <- hits_scores(g)
-  
-  # Extract authority and hub scores
-  authority_scores <- hits_result$authority
-  hub_scores <- hits_result$hub
-  
-  # Normalize the scores
-  normalized_authority_scores <- authority_scores / sqrt(sum(authority_scores^2, na.rm = TRUE))
-  normalized_hub_scores <- hub_scores / sqrt(sum(hub_scores^2, na.rm = TRUE))
-  
-  return(data.frame(
-    caseid = rownames(indegree),
-    authority_score = normalized_authority_scores,
-    hub_score = normalized_hub_scores
-  ))
+
+# allcite drop_year using for loop
+unique_years <- sort(unique(allcites_year$year), decreasing = TRUE)
+
+year_range <- 1799:2002
+
+subsets <- list()
+results <- list()
+
+for (yr in rev(year_range)) {
+  subsets[[as.character(yr)]] <- subset(allcites_year, year >= 1799 & year <= yr)
+  current_subset <- subsets[[as.character(yr)]]
+
+  nodes_complete <- unique(c(current_subset$V1, current_subset$V2))
+  vertices <- data.frame(name = nodes_complete)
+
+  g_complete <- graph_from_data_frame(current_subset, directed = TRUE, vertices = vertices)
 }
 
-# Function to process a single year
-process_year <- function(year) {
-  cat("Processing year:", year, "\n")
+  edge_nodes <- unique(c(current_subset$V1, current_subset$V2))
+  vertex_nodes <- vertices$name
   
-  # Extract indegree and outdegree for the selected year
-  indegree <- indeg %>% select(caseid, !!sym(year))
-  outdegree <- outdeg %>% select(caseid, !!sym(year))
-  
-  # Ensure numeric data and replace NAs with zeros
-  indegree <- indegree %>% mutate(across(-caseid, ~ifelse(is.na(.), 0, as.numeric(.))))
-  outdegree <- outdegree %>% mutate(across(-caseid, ~ifelse(is.na(.), 0, as.numeric(.))))
-  
-  # Filter rows/columns with non-zero values
-  non_zero_rows <- which(rowSums(as.matrix(indegree[,-1])) > 0)
-  non_zero_cols <- which(rowSums(as.matrix(outdegree[,-1])) > 0)
-  common_indices <- intersect(non_zero_rows, non_zero_cols)
-  
-  if (length(common_indices) == 0) {
-    warning(paste("Skipping year", year, "- no valid data."))
-    return(NULL)
+  missing_nodes <- setdiff(edge_nodes, vertex_nodes)
+  if (length(missing_nodes) > 0) {
+    print(missing_nodes)
   }
-  
-  indegree <- indegree[common_indices, , drop = FALSE]
-  outdegree <- outdegree[common_indices, , drop = FALSE]
-  
-  # Break the matrix into smaller chunks
-  chunk_indices <- split(1:nrow(indegree), ceiling(seq_along(1:nrow(indegree)) / max_matrix_size))
-  year_result <- data.frame()
-  
-  for (chunk in chunk_indices) {
-    sub_indegree <- indegree[chunk, -1, drop = FALSE]
-    sub_outdegree <- outdegree[chunk, -1, drop = FALSE]
-    sub_result <- process_submatrix(sub_indegree, sub_outdegree)
-    if (!is.null(sub_result)) {
-      year_result <- bind_rows(year_result, sub_result)
-    }
-  }
-  
-  # Add year information
-  year_result$year <- as.numeric(gsub("X", "", year))
-  return(year_result)
-}
-
-# Process each year and save results to file
-for (year in years) {
-  year_result <- process_year(year)
-  if (!is.null(year_result)) {
-    write.table(year_result, output_file, sep = ",", append = TRUE, col.names = FALSE, row.names = FALSE)
-    gc()  # Force garbage collection to free memory
-  }
-}
-
-cat("Processing complete. Results saved to", output_file, "\n")
 
 
+# Error messages occurred:
+# graph_from_data_frame(current_subset, directed = TRUE, vertices = vertices)에서 다음과 같은 에러가 발생했습니다: 
+#  Some vertex names in edge list are not listed in vertex data frame
 
 
-
+# setdiff(unique(c(current_subset$V1, current_subset$V2)), nodes_complete)
+# print(vertices)
+# print(nodes_complete)
+# str(vertices$name)
 
 
 
