@@ -126,57 +126,53 @@ print(benchmark_results)
 ##########################################################
 
 
-# merging year with allcites
-allcites_year <- merge(allcites, judicial[, c("caseid", "year")], 
-                 by.x = "V1", by.y = "caseid", all.x = TRUE)
+## Merged dataset
+# Merge the year data for both caseids in allcites
+allcites_with_years <- allcites %>%
+  left_join(judicial %>% select(caseid, year), by = c("V1" = "caseid")) %>%
+  rename(year1 = year) %>%
+  left_join(judicial %>% select(caseid, year), by = c("V2" = "caseid")) %>%
+  rename(year2 = year)
 
-allcites_year <- allcites_year[, c("year", "V1", "V2")]
+head(allcites_with_years)
 
-head(allcites_year)
+## Figure 6
 
-
-# allcite drop_year using for loop
-unique_years <- sort(unique(allcites_year$year), decreasing = TRUE)
-
+# Create year range and initialize storage lists
 year_range <- 1799:2002
 
+# Fig 6 ids
+fig6_ids <- c("25347", "21109")
+
 subsets <- list()
-results <- list()
+authority_scores_by_year <- list()
 
+# Process each year in reverse
 for (yr in rev(year_range)) {
-  subsets[[as.character(yr)]] <- subset(allcites_year, year >= 1799 & year <= yr)
-  current_subset <- subsets[[as.character(yr)]]
+  # Subset data for years within the range
+  subsets[[as.character(yr)]] <- subset(allcites_with_years, year1 >= 1799 & year1 <= yr)
+  complete_subsets <- subsets[[as.character(yr)]]
 
-  nodes_complete <- unique(c(current_subset$V1, current_subset$V2))
+  # Create graph for the full network
+  nodes_complete <- unique(c(complete_subsets$V1, complete_subsets$V2))
   vertices <- data.frame(name = nodes_complete)
+  g_complete <- graph_from_data_frame(complete_subsets, directed = TRUE, vertices = vertices)
 
-  g_complete <- graph_from_data_frame(current_subset, directed = TRUE, vertices = vertices)
-}
+  # Run HITS algorithm
+  hits_result_complete <- authority_score(g_complete)
 
-  edge_nodes <- unique(c(current_subset$V1, current_subset$V2))
-  vertex_nodes <- vertices$name
-  
-  missing_nodes <- setdiff(edge_nodes, vertex_nodes)
-  if (length(missing_nodes) > 0) {
-    print(missing_nodes)
+  # Authority scores
+  authority_scores_complete <- hits_result_complete$vector
+
+  # Normalize authority scores
+  normalized_authority_complete <- authority_scores_complete / sqrt(sum(authority_scores_complete^2, na.rm = TRUE))
+
+  # Store scores for the year
+  authority_scores_by_year[[as.character(yr)]] <- normalized_authority_complete
+
+  # Display specific case IDs' authority scores for the year
+  if (all(fig6_ids %in% names(normalized_authority_complete))) {
+    cat(sprintf("\nYear: %d\n", yr))
+    print(normalized_authority_complete[fig6_ids])
   }
-
-
-# Error messages occurred:
-# graph_from_data_frame(current_subset, directed = TRUE, vertices = vertices)에서 다음과 같은 에러가 발생했습니다: 
-#  Some vertex names in edge list are not listed in vertex data frame
-
-
-# setdiff(unique(c(current_subset$V1, current_subset$V2)), nodes_complete)
-# print(vertices)
-# print(nodes_complete)
-# str(vertices$name)
-
-
-
-
-
-
-
-
-
+}
