@@ -349,13 +349,13 @@ ggplot(filtered_df, aes(x = year, y = authority_score, linetype = case_id)) +
     x = "Year",
     y = "Authority Score"
   ) +
-  annotate("text", x = 1950, y = 0.04, label = "Brown v. Mississippi,\n297 U.S. 278 (1936)",
+  annotate("text", x = 1945, y = 0.04, label = "Brown v. Mississippi,\n297 U.S. 278 (1936)",
            fontface = "italic", hjust = 0) +
-  annotate("text", x = 1987, y = 0.05, label = "Miranda v. Arizona,\n384 U.S. 436 (1966)",
+  annotate("text", x = 1985, y = 0.05, label = "Miranda v. Arizona,\n384 U.S. 436 (1966)",
            fontface = "italic", hjust = 0) +
-  annotate("text", x = 1973, y = 0.018, label = "Escobedo v. Illinois,\n378 U.S. 478 (1964)",
+  annotate("text", x = 1973, y = 0.02, label = "Escobedo v. Illinois,\n378 U.S. 478 (1964)",
            fontface = "italic", hjust = 0) +
-  annotate("text", x = 1985, y = 0.01, label = "Rhode Island v. Innis,\n446 U.S. 291 (1980)",
+  annotate("text", x = 1984, y = 0.01, label = "Rhode Island v. Innis,\n446 U.S. 291 (1980)",
            fontface = "italic", hjust = 0) +
   labs(
     x = "Year",
