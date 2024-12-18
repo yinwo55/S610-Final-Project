@@ -1,4 +1,5 @@
 library(tidyverse)
+library(microbenchmark)
 library(dplyr)
 library(stringr)
 library(igraph)
@@ -26,9 +27,13 @@ judicial <- read.csv(judicial_path, header = TRUE, sep = ",")
 indeg <- read.csv(indeg_path, header = TRUE, sep = ",")
 outdeg <- read.csv(outdeg_path, header = TRUE, sep = ",")
 
-##### Case 5(Abortion Landmark)
 
-### Matrix calculation
+##########################################################
+##### Case 5(Abortion Landmark) with Matrix Calculation
+##########################################################
+
+
+##### Matrix calculation #####
 
 # Define the nodes in the five-case network
 five_case_nodes <- c(25347, 27633, 28354, 29003, 29459)
@@ -36,9 +41,6 @@ five_case_nodes <- c(25347, 27633, 28354, 29003, 29459)
 # Filter edges where both `V1` and `V2` belong to the five-case network
 Roe_v_wade_five <- allcite %>% 
   filter(V1 %in% five_case_nodes, V2 %in% five_case_nodes)
-
-# View the result
-Roe_v_wade_five
 
 # Define edges from the filtered data
 edges <- data.frame(from = Roe_v_wade_five$V1, to = Roe_v_wade_five$V2)
@@ -49,34 +51,80 @@ nodes <- unique(c(edges$from, edges$to))
 # Create the graph
 g <- graph_from_data_frame(edges, directed = TRUE, vertices = data.frame(name = nodes))
 
-# Generate Adjacency matrix
+# Generate Adjacency matrix (dense matrix)
 adj_matrix <- as_adjacency_matrix(g, sparse = FALSE)
 
 # Transposed adjacency matrix
 transposed_matrix <- t(adj_matrix)
 
-# A^T * A
-authority_matrix <- transposed_matrix %*% adj_matrix
+# Matrix-based Calculation with Sparse Matrix Optimization
+# Sparse adjacency matrix
+adj_matrix_sparse <- as(adj_matrix, "dgCMatrix")  # Convert to sparse matrix format
 
-# Authority score eigenvalue decomposition
-eig_result <- eigen(authority_matrix)
+# Transposed sparse matrix
+transposed_matrix_sparse <- t(adj_matrix_sparse)
+
+# A^T * A using sparse matrix
+authority_matrix_sparse <- transposed_matrix_sparse %*% adj_matrix_sparse
+
+# Eigen decomposition with sparse matrix
+eig_result_sparse <- eigen(as.matrix(authority_matrix_sparse))
 
 # Extracting the eigenvector corresponding to the largest eigenvalue
-raw_authority_scores <- eig_result$vectors[, 1]
+raw_authority_scores_sparse <- eig_result_sparse$vectors[, 1]
 
-# Adjusting the sign (ensuring the first value is positive)
-if (raw_authority_scores[1] < 0) {
-  raw_authority_scores <- -raw_authority_scores
+# Adjusting the sign
+if (raw_authority_scores_sparse[1] < 0) {
+  raw_authority_scores_sparse <- -raw_authority_scores_sparse
 }
 
 # Euclidean normalization
-normalized_authority_scores <- raw_authority_scores / sqrt(sum(raw_authority_scores^2))
+normalized_authority_scores_matrix <- raw_authority_scores_sparse / sqrt(sum(raw_authority_scores_sparse^2))
 
-# result
-normalized_authority_scores
+##### HITS calculation #####
+
+# HITS algorithm using hits_scores()
+hits_result <- hits_scores(g)
+
+# Extract authority scores
+authority_scores <- hits_result$authority
+
+# Normalize authority scores (Euclidean normalization)
+normalized_authority_scores_hits <- authority_scores / sqrt(sum(authority_scores^2))
+
+# Result Comparison
+results <- rbind(
+  Matrix = normalized_authority_scores_matrix,
+  HITS = normalized_authority_scores_hits
+)
+
+print(results)
 
 
+# Benchmark the two methods
+benchmark_results <- microbenchmark(
+  Matrix_Calculation = {
+    # Matrix-based calculation (optimized with sparse matrices)
+    authority_matrix_sparse <- transposed_matrix_sparse %*% adj_matrix_sparse
+    eig_result_sparse <- eigen(as.matrix(authority_matrix_sparse))
+    raw_authority_scores_sparse <- eig_result_sparse$vectors[, 1]
+  },
+  HITS_Calculation = {
+    # HITS algorithm
+    hits_result <- hits_scores(g)
+    authority_scores <- hits_result$authority
+  },
+  times = 100
+)
+
+# Print benchmark results
+print(benchmark_results)
+
+
+##########################################################
 ##### Authority score for Fig 6 by Using HITS Packages
+##########################################################
+
 
 # Extract all years
 years <- colnames(indeg)[-1]  # Exclude the first column (caseid)
