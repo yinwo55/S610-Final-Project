@@ -1,0 +1,371 @@
+---
+title: S610 Final Project
+subtitle: "S610_Project_4th_Week"
+date: "2024-11-12"
+author:
+  name: Inwoo Lee
+  affiliation: Department of Political Science
+output: 
+  html_document:
+    latex_engine: xelatex
+    keep_tex: false
+    theme: journal
+    highlight: kate
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+#  pdf_document:
+ #   latex_engine: xelatex
+#    toc: true
+#    dev: cairo_pdf
+always_allow_html: true
+urlcolor: blue
+# mainfont: cochineal
+# sansfont: Fira Sans
+# monofont: Fira Code
+---
+
+<style>
+
+body {
+  font-family: 'Times New Roman', Times, serif; /* Example of changing the font for the entire document */
+  font-size: 16px; /* Adjust the font size if needed */
+  color: black; /* Ensures the body text is black */
+}
+
+p {
+  text-align: justify;
+  text-indent: 2em;
+  color: black; /* Ensures paragraph text is black */
+}
+
+</style>
+
+```{r, message = FALSE}
+library(tidyverse)
+library(dplyr)
+library(stringr)
+library(igraph)
+library(ggraph)
+library(xtable)
+library(tidygraph)
+library(ggplot2)
+library(gridExtra)
+options(digits = 3)
+```
+
+
+A hub is a case that cites many other decisions, helping to define which legally relevant decisions are pertinent to a given precedent, while an authority is a case that is widely cited by other decisions (p.20).
+
+### 1. Table 1
+
+
+```{r, echo = FALSE}
+allcite_path <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\Judicial\\allcites.txt"
+judicial_path <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\Judicial\\judicial.csv"
+indeg_path <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\Judicial\\indegmat.txt"
+outdeg_path <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\Judicial\\outdegmat.txt"
+authmat_path <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\Judicial\\authmat.txt"
+hubmat_path <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\Judicial\\hubmat.txt"
+
+allcite <- read.csv(allcite_path, header = FALSE, sep = " ")
+judicial <- read.csv(judicial_path, header = TRUE, sep = ",")
+indeg <- read.csv(indeg_path, header = TRUE, sep = ",")
+outdeg <- read.csv(outdeg_path, header = TRUE, sep = ",")
+authmat <- read.csv(authmat_path, header = TRUE, sep = ",")
+hubmat <- read.csv(hubmat_path, header = TRUE, sep = ",")
+```
+
+```{r}
+latex_table_auth_mat <- xtable(head(authmat[, 1:6]))
+print(latex_table_auth_mat)
+
+latex_table_auth_mat <- xtable(head(authmat[, -(1:(ncol(authmat) - 6))]))
+print(latex_table_auth_mat)
+```
+
+##### Case 5(Abortion Landmark)
+
+
+```{r}
+fig.6_long <- authmat %>%
+  filter(caseid %in% c(21109, 25347)) %>%
+  select(caseid, X1970:X1980)
+
+latex_table_fig.6_before_pivot <- xtable(head(fig.6_long))
+print(latex_table_fig.6_before_pivot)
+```
+
+
+
+
+```{r}
+# judicial %>% filter(caseid == 21109)
+
+fig.6_long <- authmat %>%
+  filter(caseid %in% c(21109, 25347)) %>%
+  pivot_longer(
+    cols = starts_with("X"),
+    names_to = "year",
+    values_to = "authority_score",
+    names_prefix = "X"
+  ) %>%
+  mutate(
+    year = as.numeric(year),
+    years_after_decision = ifelse(caseid == 21109, year - 1954, year - 1973),
+    case_name = case_when(
+      caseid == 21109 ~ "Brown v. Board of Education, 347 U.S. 483 (1954)",
+      caseid == 25347 ~ "Roe v. Wade, 310 U.S. 113 (1973)"
+    )
+  ) %>%
+  filter(!is.na(authority_score))
+```
+
+```{r}
+latex_table_fig.6_long <- xtable(head(fig.6_long))
+print(latex_table_fig.6_long)
+```
+
+
+```{r}
+ggplot(fig.6_long, aes(x = years_after_decision, y = authority_score)) +
+  geom_line(aes(linetype = case_name), size = 0.2) +
+  scale_linetype_manual(
+    values = c(
+      "Roe v. Wade, 310 U.S. 113 (1973)" = "solid",
+      "Brown v. Board of Education, 347 U.S. 483 (1954)" = "dashed"
+    )
+  ) +
+  labs(
+    x = "Years After Decision",
+    y = "Authority Score",
+    title = "Rise of Brown and Roe",
+    linetype = "Case"
+  ) +
+  scale_x_continuous(limits = c(0, 30)) +
+  scale_y_continuous(limits = c(0, 0.065)) +
+  theme_classic() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+
+```{r}
+# judicial %>% filter(usid %in% c("297US278", "378US478", "446US291", "384US436"))
+
+figure.10_long <- authmat %>%
+  filter(caseid %in% c(18501, 23115, 23601, 26918)) %>%
+  pivot_longer(
+    cols = starts_with("X"),
+    names_to = "year",
+    values_to = "authority_score",
+    names_prefix = "X"
+  ) %>%
+  mutate(
+    year = as.numeric(year),
+    case_name = case_when(
+      caseid == 18501 ~ "Brown v. Mississippi, 297 U.S. 278 (1936)",
+      caseid == 23115 ~ "Miranda v. Arizona, 384 U.S. 436 (1966)",
+      caseid == 23601 ~ "Escobedo v. Illinois, 378 U.S. 478 (1964)",
+      caseid == 26918 ~ "Rhode Island v. Innis, 446 U.S. 291 (1980)"
+    )
+  ) %>%
+  filter(!is.na(authority_score))
+```
+
+
+```{r}
+# graph
+ggplot(figure.10_long, aes(x = year, y = authority_score, linetype = case_name)) +
+  geom_line(size = 0.2) + # line thickness
+  scale_linetype_manual(
+    values = c(
+      "Brown v. Mississippi, 297 U.S. 278 (1936)" = "dashed",
+      "Miranda v. Arizona, 384 U.S. 436 (1966)" = "solid",
+      "Escobedo v. Illinois, 378 U.S. 478 (1964)" = "dotted",
+      "Rhode Island v. Innis, 446 U.S. 291 (1980)" = "dotdash"
+    )
+  ) +
+  labs(
+    x = "Year",
+    y = "Authority Score",
+    title = "The evolution of Fifth Amendment case law",
+    linetype = NULL
+  ) +
+  annotate("text", x = 1950, y = 0.04, label = "Brown v. Mississippi\n297 U.S. 278 (1936)", hjust = 0, size = 3.5) +
+  annotate("text", x = 1987, y = 0.05, label = "Miranda v. Arizona\n384 U.S. 436 (1966)", hjust = 0, size = 3.5) +
+  annotate("text", x = 1973, y = 0.018, label = "Escobedo v. Illinois\n378 U.S. 478 (1964)", hjust = 0, size = 3.5) +
+  annotate("text", x = 1990, y = 0.01, label = "Rhode Island v. Innis\n446 U.S. 291 (1980)", hjust = 0, size = 3.5) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  xlim(1940, 2000)
+```
+
+
+```{r}
+
+judicial %>% filter(usid %in% c("38US519", "22US1", "230US352", "310US296"))
+
+
+figure.8_long <- authmat %>%
+  filter(caseid %in% c(1156, 1861, 13828, 19238)) %>%
+  pivot_longer(
+    cols = starts_with("X"),
+    names_to = "year",
+    values_to = "authority_score",
+    names_prefix = "X"
+  ) %>%
+  mutate(
+    year = as.numeric(year),
+    case_name = case_when(
+      caseid == 1156 ~ "Gibbons v. Ogden, 22 U.S. 1 (1824)",
+      caseid == 1861 ~ "Bank of Augusta v. Earle, 38 U.S. 519 (1839)",
+      caseid == 13828 ~ "Minnesota Rate Cases, 230 U.S. 352 (1913)",
+      caseid == 19238 ~ "Cantwell v. Connecticut, 310 U.S. 296 (1940)"
+    )
+  ) %>%
+  filter(!is.na(authority_score))
+```
+
+
+```{r}
+figure.8_long_filtered <- figure.8_long %>%
+  filter(year >= 1850 & year <= 2000)
+
+ggplot(figure.8_long_filtered, aes(x = year, y = authority_score, linetype = case_name)) +
+  geom_line(size = 0.2) +
+  scale_linetype_manual(
+    values = c(
+      "Bank of Augusta v. Earle, 38 U.S. 519 (1839)" = "dashed",
+      "Gibbons v. Ogden, 22 U.S. 1 (1824)" = "solid",
+      "Minnesota Rate Cases, 230 U.S. 352 (1913)" = "dotted",
+      "Cantwell v. Connecticut, 310 U.S. 296 (1940)" = "dotdash"
+    )
+  ) +
+  labs(
+    x = "Year",
+    y = "Authority Score",
+    title = "Rise and fall of authorities",
+    linetype = NULL
+  ) +
+  annotate("text", x = 1850, y = 0.23, label = "Bank of Augusta v. Earle\n38 U.S. 519 (1839)", hjust = 0, size = 2.5) +
+  annotate("text", x = 1886, y = 0.32, label = "Gibbons v. Ogden\n22 U.S. 1 (1824)", hjust = 0, size = 2.5) +
+  annotate("text", x = 1940, y = 0.23, label = "Minnesota Rate Cases\n230 U.S. 352 (1913)", hjust = 0, size = 2.5) +
+  annotate("text", x = 1975, y = 0.25, label = "Cantwell v. Connecticut\n310 U.S. 296 (1940)", hjust = 0, size = 2.5) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  xlim(1850, 2000)
+```
+
+
+```{r}
+judicial %>% filter(usid %in% c("230US352", "17US316", "22US1", "310US88", "310US296"))
+
+
+figure.9_long <- authmat %>%
+  filter(caseid %in% c(1016, 1156, 13828, 19230, 19238)) %>%
+  pivot_longer(
+    cols = starts_with("X"),
+    names_to = "year",
+    values_to = "authority_score",
+    names_prefix = "X"
+  ) %>%
+  mutate(
+    year = as.numeric(year),
+    case_name = case_when(
+      caseid == 1016 ~ "McCulloch v. Maryland, 17. U.S. 316 (1819)",
+      caseid == 1156 ~ "Gibbons v. Ogden, 22. U.S. 1 (1824)",
+      caseid == 13828 ~ "Minnesota Rate Cases, 230 U.S. 352 (1913)",
+      caseid == 19230 ~ "Thornhill v. Alabama, 310 U.S. 88 (1940)",
+      caseid == 19238 ~ "Cantwell v. Connecticut, 310 U.S. 296 (1940)"
+    )
+  ) %>%
+  filter(!is.na(authority_score))
+```
+
+```{r}
+ggplot(figure.9_long, aes(x = year, y = authority_score, linetype = case_name)) +
+  geom_line(size = 0.2) + # line thickness
+  scale_linetype_manual(
+    values = c(
+      "McCulloch v. Maryland, 17. U.S. 316 (1819)" = "dashed",
+      "Gibbons v. Ogden, 22. U.S. 1 (1824)" = "solid",
+      "Minnesota Rate Cases, 230 U.S. 352 (1913)" = "dotted",
+      "Thornhill v. Alabama, 310 U.S. 88 (1940)" = "longdash",
+      "Cantwell v. Connecticut, 310 U.S. 296 (1940)" = "dotdash"
+    )
+  ) +
+  labs(
+    x = "Year",
+    y = "Authority Score",
+    title = "Importance of commerce and civil rights issues",
+    linetype = NULL
+  ) +
+  # Adding arrow annotation for Gibbons v. Ogden
+  geom_segment(
+    aes(x = 1955, xend = 1960, y = 0.15, yend = 0.18), 
+    arrow = arrow(length = unit(0.02, "npc")), 
+    inherit.aes = FALSE
+  ) +
+  annotate("text", x = 1960, y = 0.18, label = "Gibbons v. Ogden\n22 U.S. 1 (1824)", hjust = 0, size = 2.5) +
+  annotate("text", x = 1950, y = 0.135, label = "McCulloch v. Maryland\n17. U.S. 316 (1819)", hjust = 0, size = 2.5) +
+  annotate("text", x = 1950, y = 0.22, label = "Minnesota Rate Cases\n230 U.S. 352 (1913)", hjust = 0, size = 2.5) +
+  annotate("text", x = 1967, y = 0.125, label = "Thornhill v. Alabama\n310 U.S. 88 (1940)", hjust = 0, size = 2.5) +
+  annotate("text", x = 1967, y = 0.2, label = "Cantwell v. Connecticut\n310 U.S. 296 (1940)", hjust = 0, size = 2.5) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  xlim(1950, 1970) +
+  ylim(0, 0.25)
+```
+
+```{r}
+ggplot(figure.9_long, aes(x = year, y = authority_score, linetype = case_name)) +
+  geom_line(size = 0.2) + # line thickness
+  scale_linetype_manual(
+    values = c(
+      "McCulloch v. Maryland, 17. U.S. 316 (1819)" = "dashed",
+      "Gibbons v. Ogden, 22. U.S. 1 (1824)" = "solid",
+      "Minnesota Rate Cases, 230 U.S. 352 (1913)" = "dotted",
+      "Thornhill v. Alabama, 310 U.S. 88 (1940)" = "longdash",
+      "Cantwell v. Connecticut, 310 U.S. 296 (1940)" = "dotdash"
+    )
+  ) +
+  labs(
+    x = "Year",
+    y = "Authority Score",
+    title = "Importance of commerce and civil rights issues",
+    linetype = NULL
+  ) +
+  # Adjusting arrow annotation for Gibbons v. Ogden
+  geom_segment(
+    aes(x = 1955, xend = 1957, y = 0.17, yend = 0.19), 
+    arrow = arrow(length = unit(0.02, "npc")), 
+    inherit.aes = FALSE
+  ) +
+  annotate("text", x = 1957, y = 0.2, label = "Gibbons v. Ogden\n22 U.S. 1 (1824)", hjust = 0, size = 2.5) +
+  annotate("text", x = 1950, y = 0.135, label = "McCulloch v. Maryland\n17. U.S. 316 (1819)", hjust = 0, size = 2.5) +
+  annotate("text", x = 1950, y = 0.22, label = "Minnesota Rate Cases\n230 U.S. 352 (1913)", hjust = 0, size = 2.5) +
+  annotate("text", x = 1967, y = 0.125, label = "Thornhill v. Alabama\n310 U.S. 88 (1940)", hjust = 0, size = 2.5) +
+  annotate("text", x = 1967, y = 0.2, label = "Cantwell v. Connecticut\n310 U.S. 296 (1940)", hjust = 0, size = 2.5) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  xlim(1950, 1970) +
+  ylim(0, 0.25)
+```
+
+
+

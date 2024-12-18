@@ -1,0 +1,509 @@
+---
+title: S610 Final Project
+subtitle: "S610_Project_1st_Week"
+date: "2024-11-12"
+author:
+  name: Inwoo Lee
+  affiliation: Department of Political Science
+output: 
+  html_document:
+    latex_engine: xelatex
+    keep_tex: false
+    theme: journal
+    highlight: kate
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+#  pdf_document:
+ #   latex_engine: xelatex
+#    toc: true
+#    dev: cairo_pdf
+always_allow_html: true
+urlcolor: blue
+# mainfont: cochineal
+# sansfont: Fira Sans
+# monofont: Fira Code
+---
+
+<style>
+
+body {
+  font-family: 'Times New Roman', Times, serif; /* Example of changing the font for the entire document */
+  font-size: 16px; /* Adjust the font size if needed */
+  color: black; /* Ensures the body text is black */
+}
+
+p {
+  text-align: justify;
+  text-indent: 2em;
+  color: black; /* Ensures paragraph text is black */
+}
+
+</style>
+
+```{r, message = FALSE}
+library(tidyverse)
+# library(git2r) # cloning github
+library(dplyr)
+library(stringr)
+library(igraph)
+library(ggraph)
+library(tidygraph)
+library(ggplot2)
+library(gridExtra)
+library(xtable)
+library(Matrix)
+# library(foreach)
+# library(doParallel)
+library(tidyr)
+options(digits = 3)
+```
+
+
+A hub is a case that cites many other decisions, helping to define which legally relevant decisions are pertinent to a given precedent, while an authority is a case that is widely cited by other decisions (p.20).
+
+### 1. Table 1
+
+
+```{r, echo = FALSE}
+allcite_path <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\Judicial\\allcites.txt"
+judicial_path <- "C:\\Users\\User\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\Judicial\\judicial.csv"
+indeg_path <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\Judicial\\indegmat.txt"
+outdeg_path <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\Judicial\\outdegmat.txt"
+
+allcite <- read.csv(allcite_path, header = FALSE, sep = " ")
+judicial <- read.csv(judicial_path, header = TRUE, sep = ",")
+indeg <- read.csv(indeg_path, header = TRUE, sep = ",")
+outdeg <- read.csv(outdeg_path, header = TRUE, sep = ",")
+```
+
+```{r}
+colnames(judicial)
+```
+
+```{r}
+judicial %>% filter(caseid %in% c("27633", "28354", "29003", "29459", "25347")) |> 
+  select("caseid", "auth")
+
+```
+
+
+
+##### Case 5(Abortion Landmark)
+
+```{r}
+# Define the nodes in the five-case network
+five_case_nodes <- c(25347, 27633, 28354, 29003, 29459)
+
+# Filter edges where both `V1` and `V2` belong to the five-case network
+Roe_v_wade_five <- allcite %>% 
+  filter(V1 %in% five_case_nodes, V2 %in% five_case_nodes)
+
+# View the result
+Roe_v_wade_five
+
+# Define edges from the filtered data
+edges <- data.frame(from = Roe_v_wade_five$V1, to = Roe_v_wade_five$V2)
+
+# Define nodes (extract unique nodes from edges)
+nodes <- unique(c(edges$from, edges$to))
+
+# Create the graph
+g <- graph_from_data_frame(edges, directed = TRUE, vertices = data.frame(name = nodes))
+```
+
+
+```{r}
+# Run HITS Algorithm
+hits_result <- authority_score(g)
+
+# Authority Score
+hits_result$vector
+
+# Roe v. Wade (caseid = 25347)
+roe_authority <- hits_result$vector["25347"]
+roe_authority
+```
+**Checked score is matched with table 1**
+
+```{r}
+# Euclidean Normalization of Authority Scores
+normalized_authority <- hits_result$vector / sqrt(sum(hits_result$vector^2))
+normalized_authority
+```
+
+```{r}
+# Execution of the HITS Algorithm (simultaneous calculation of authority and hub scores)
+hits_result <- hits_scores(g)
+
+# Extracting authority and hub scores
+authority_scores <- hits_result$authority
+hub_scores <- hits_result$hub
+```
+
+**Euclidean Normalization**
+
+```{r}
+# Authority Score
+normalized_authority <- authority_scores / sqrt(sum(authority_scores^2))
+normalized_authority
+```
+
+##### 5 cases
+
+```{r}
+# Adjacency matrix 생성
+adj_matrix <- as_adjacency_matrix(g, sparse = FALSE)
+
+# Transposed adjacency matrix
+transposed_matrix <- t(adj_matrix)
+
+# A^T * A 계산
+authority_matrix <- transposed_matrix %*% adj_matrix
+
+# Authority score 계산 (고유값 분해)
+eig_result <- eigen(authority_matrix)
+
+# 가장 큰 고유값에 대응하는 고유벡터 추출
+raw_authority_scores <- eig_result$vectors[, 1]
+
+# 부호 조정 (첫 번째 값이 양수가 되도록)
+if (raw_authority_scores[1] < 0) {
+  raw_authority_scores <- -raw_authority_scores
+}
+
+# Euclidean normalization
+normalized_authority_scores <- raw_authority_scores / sqrt(sum(raw_authority_scores^2))
+
+# 결과 확인
+normalized_authority_scores
+```
+
+##### all cases
+
+```{r}
+
+## !!!!! Matrix Calculation
+
+# 모든 연도 추출
+years <- colnames(indeg)[-1]  # 첫 번째 열은 caseid
+
+# 결과를 저장할 데이터프레임 초기화
+result <- data.frame()
+
+# 각 연도별 Authority & Hub Score 계산
+for (year in years) {
+  # 해당 연도의 indegree와 outdegree 추출
+  indegree <- indeg %>% select(caseid, !!sym(year))
+  outdegree <- outdeg %>% select(caseid, !!sym(year))
+  
+  # 인접 행렬 생성
+  adj_matrix <- as.matrix(indegree[,-1]) %*% t(as.matrix(outdegree[,-1]))
+  
+  # Authority Score 계산
+  authority_matrix <- t(adj_matrix) %*% adj_matrix
+  eig_authority <- eigen(authority_matrix)
+  raw_authority_scores <- eig_authority$vectors[, 1]
+  
+  # Hub Score 계산
+  hub_matrix <- adj_matrix %*% t(adj_matrix)
+  eig_hub <- eigen(hub_matrix)
+  raw_hub_scores <- eig_hub$vectors[, 1]
+  
+  # 정규화
+  normalized_authority_scores <- raw_authority_scores / sqrt(sum(raw_authority_scores^2))
+  normalized_hub_scores <- raw_hub_scores / sqrt(sum(raw_hub_scores^2))
+  
+  # 결과 저장
+  temp_result <- data.frame(
+    caseid = indegree$caseid,
+    year = as.numeric(year),
+    authority_score = normalized_authority_scores,
+    hub_score = normalized_hub_scores
+  )
+  
+  # 전체 결과에 추가
+  result <- bind_rows(result, temp_result)
+}
+
+# 결과 확인
+print(result)
+
+# 파일로 저장
+write.csv(result, "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\authority_hub_scores_per_year.txt", row.names = FALSE)
+```
+
+
+
+### error...
+
+```{r}
+# Extract all years
+years <- colnames(indeg)[-1]  # Exclude the first column (caseid)
+
+# Initialize a file for results
+output_file <- "C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\authority_hub_scores_per_year.txt"
+write.csv(data.frame(), output_file, row.names = FALSE)  # Create an empty file
+
+# Maximum size for submatrices
+max_matrix_size <- 200  # Adjust based on memory constraints
+
+# Function to process a submatrix
+process_submatrix <- function(indegree, outdegree) {
+  adj_matrix <- as(as.matrix(indegree) %*% t(as.matrix(outdegree)), "dgCMatrix")
+  
+  # Skip if adjacency matrix is empty
+  if (sum(adj_matrix) == 0) {
+    return(NULL)
+  }
+  
+  # Create the graph from sparse matrix
+  g <- graph_from_adjacency_matrix(adj_matrix, mode = "directed", weighted = NULL)
+  
+  # Apply HITS algorithm
+  hits_result <- hits_scores(g)
+  
+  # Extract authority and hub scores
+  authority_scores <- hits_result$authority
+  hub_scores <- hits_result$hub
+  
+  # Normalize the scores
+  normalized_authority_scores <- authority_scores / sqrt(sum(authority_scores^2, na.rm = TRUE))
+  normalized_hub_scores <- hub_scores / sqrt(sum(hub_scores^2, na.rm = TRUE))
+  
+  return(data.frame(
+    caseid = rownames(indegree),
+    authority_score = normalized_authority_scores,
+    hub_score = normalized_hub_scores
+  ))
+}
+
+# Function to process a single year
+process_year <- function(year) {
+  cat("Processing year:", year, "\n")
+  
+  # Extract indegree and outdegree for the selected year
+  indegree <- indeg %>% select(caseid, !!sym(year))
+  outdegree <- outdeg %>% select(caseid, !!sym(year))
+  
+  # Ensure numeric data and replace NAs with zeros
+  indegree <- indegree %>% mutate(across(-caseid, ~ifelse(is.na(.), 0, as.numeric(.))))
+  outdegree <- outdegree %>% mutate(across(-caseid, ~ifelse(is.na(.), 0, as.numeric(.))))
+  
+  # Filter rows/columns with non-zero values
+  non_zero_rows <- which(rowSums(as.matrix(indegree[,-1])) > 0)
+  non_zero_cols <- which(rowSums(as.matrix(outdegree[,-1])) > 0)
+  common_indices <- intersect(non_zero_rows, non_zero_cols)
+  
+  if (length(common_indices) == 0) {
+    warning(paste("Skipping year", year, "- no valid data."))
+    return(NULL)
+  }
+  
+  indegree <- indegree[common_indices, , drop = FALSE]
+  outdegree <- outdegree[common_indices, , drop = FALSE]
+  
+  # Break the matrix into smaller chunks
+  chunk_indices <- split(1:nrow(indegree), ceiling(seq_along(1:nrow(indegree)) / max_matrix_size))
+  year_result <- data.frame()
+  
+  for (chunk in chunk_indices) {
+    sub_indegree <- indegree[chunk, -1, drop = FALSE]
+    sub_outdegree <- outdegree[chunk, -1, drop = FALSE]
+    sub_result <- process_submatrix(sub_indegree, sub_outdegree)
+    if (!is.null(sub_result)) {
+      year_result <- bind_rows(year_result, sub_result)
+    }
+  }
+  
+  # Add year information
+  year_result$year <- as.numeric(gsub("X", "", year))
+  return(year_result)
+}
+
+# Process each year and save results to file
+for (year in years) {
+  year_result <- process_year(year)
+  if (!is.null(year_result)) {
+    write.table(year_result, output_file, sep = ",", append = TRUE, col.names = FALSE, row.names = FALSE)
+    gc()  # Force garbage collection to free memory
+  }
+}
+
+cat("Processing complete. Results saved to", output_file, "\n")
+```
+
+```{r}
+authority <- read.csv("C:\\Users\\yonwo\\OneDrive\\바탕 화면\\PH.D\\course work\\3rd Semester\\Intro to Statistical Computing\\Final Project\\authority_hub_scores_per_year.txt", sep = ",", header = FALSE) 
+
+head(authority)
+```
+
+```{r}
+
+judicial_auth <- judicial %>% 
+  filter(caseid %in% c("27633", "28354", "29003", "29459", "25347")) %>% 
+  select(caseid, auth, indeg, outdeg)
+
+authority_auth <- authority %>% 
+  filter(V1 %in% c("27633", "28354", "29003", "29459", "25347")) %>% 
+  arrange()
+
+```
+
+```{r}
+authority_auth
+```
+
+```{r}
+judicial_auth
+```
+
+```{r}
+x <- outdeg %>% 
+  filter(caseid == 25347) %>% 
+  pivot_longer(
+    cols = starts_with("X"),
+    names_to = "year",
+    values_to = "authority_score",
+    names_prefix = "X"
+  )
+
+x %>% 
+  filter(year == "2002")
+
+```
+```{r}
+allcite
+```
+
+
+
+
+**for Latex code**
+
+```{r}
+# Normalized authority scores를 데이터 프레임으로 변환
+normalized_authority_df <- data.frame(
+  Node = names(normalized_authority),
+  Authority = normalized_authority
+)
+
+# xtable 적용 
+latex_normalized_authority <- xtable(normalized_authority_df)
+
+# LaTeX로 출력
+print(latex_normalized_authority)
+```
+
+
+```{r}
+# Hub Score
+normalized_hub <- hub_scores / sqrt(sum(hub_scores^2))
+print(round(normalized_hub, 3))
+```
+
+##### 2) 92 cases
+
+```{r}
+Roe_cited <- allcite %>% 
+  filter(V2 == "25347")
+```
+
+```{r}
+case_ids_92 <- allcite %>% 
+  filter(V2 == "25347") %>%  # Filter rows where V2 equals "25347"
+  pull(V1) %>%               # Pull the V1 column values
+  unique()                   # Retain only unique values
+
+# Check the result
+print(case_ids_92)
+```
+
+```{r}
+case_ids_92 = c(case_ids_92, 25347)
+length(case_ids_92)
+```
+
+```{r}
+# Filter edges for the 92-case network
+edges_92 <- allcite %>% 
+  filter(V1 %in% case_ids_92 & V2 %in% case_ids_92)
+```
+
+```{r}
+# Nodes in the 92-case network
+nodes_92 <- unique(c(edges_92$V1, edges_92$V2))
+
+# Create the graph
+g_92 <- graph_from_data_frame(edges_92, directed = TRUE, vertices = data.frame(name = nodes_92))
+```
+
+
+```{r}
+# Compute HITS scores using hits_scores()
+hits_result_92 <- hits_scores(g_92)
+
+# Extract authority and hub scores
+authority_scores_92 <- hits_result_92$authority  # Authority scores
+hub_scores_92 <- hits_result_92$hub              # Hub scores
+
+# Print results
+# print(authority_scores_92)
+# print(hub_scores_92)
+```
+
+```{r}
+normalized_authority_92 <- authority_scores_92 / sqrt(sum(authority_scores_92^2))
+normalized_hub_92 <- hub_scores_92 / sqrt(sum(hub_scores_92^2))
+```
+```{r}
+# Define the case IDs you want to extract
+table1_case_ids <- c("27633", "28354", "29003", "29459", "25347")
+
+# Extract their normalized authority values
+(table1_92ids_authority <- normalized_authority_92[table1_case_ids])
+```
+
+```{r}
+(table1_92ids_hub <- normalized_hub_92[table1_case_ids])
+```
+
+##### 3) Complete Cases
+
+```{r}
+# Create graph for the full network
+nodes_complete <- unique(c(allcite$V1, allcite$V2))
+g_complete <- graph_from_data_frame(allcite, directed = TRUE, vertices = data.frame(name = nodes_complete))
+```
+
+```{r}
+# Run HITS algorithm
+hits_result_complete <- hits_scores(g_complete)
+
+# Authority and hub scores
+authority_scores_complete <- hits_result_complete$authority
+hub_scores_complete <- hits_result_complete$hub
+```
+
+
+```{r}
+# Normalize authority scores
+normalized_authority_complete <- authority_scores_complete / sqrt(sum(authority_scores_complete^2))
+
+# Normalize hub scores
+normalized_hub_complete <- hub_scores_complete / sqrt(sum(hub_scores_complete^2))
+```
+
+```{r}
+table1_case_ids <- c("27633", "28354", "29003", "29459", "25347")
+
+(table1_complete_authority <- normalized_authority_complete[table1_case_ids])
+```
+```{r}
+(table1_complete_hub <- normalized_hub_complete[table1_case_ids])
+```
+
+
+
+

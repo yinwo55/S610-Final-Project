@@ -1,0 +1,251 @@
+---
+title: S610 Final Project
+subtitle: "S610_Project_1st_Week"
+date: "2024-11-12"
+author:
+  name: Inwoo Lee
+  affiliation: Department of Political Science
+output: 
+  html_document:
+    latex_engine: xelatex
+    keep_tex: false
+    theme: journal
+    highlight: kate
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+#  pdf_document:
+ #   latex_engine: xelatex
+#    toc: true
+#    dev: cairo_pdf
+always_allow_html: true
+urlcolor: blue
+# mainfont: cochineal
+# sansfont: Fira Sans
+# monofont: Fira Code
+---
+
+<style>
+
+body {
+  font-family: 'Times New Roman', Times, serif; /* Example of changing the font for the entire document */
+  font-size: 16px; /* Adjust the font size if needed */
+  color: black; /* Ensures the body text is black */
+}
+
+p {
+  text-align: justify;
+  text-indent: 2em;
+  color: black; /* Ensures paragraph text is black */
+}
+
+</style>
+
+```{r, message = FALSE}
+library(tidyverse)
+library(git2r) # cloning github
+library(dplyr)
+library(stringr)
+library(igraph)
+library(ggraph)
+library(tidygraph)
+```
+
+### 1. Cloning Github repository
+
+```{r, include = FALSE}
+library(httr)
+library(jsonlite)
+
+# GitHub API URL
+repo_api <- "https://api.github.com/repos/yinwo55/S610-Final-Project/contents/?ref=data"
+
+# My token
+token <- "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"
+
+response <- GET(repo_api, add_headers(Authorization = paste("token", token)))
+
+
+# JSON 데이터를 데이터 프레임으로 변환
+files <- fromJSON(content(response, "text"))
+
+# files data frame
+print(files)
+
+# file name
+print(files$name)
+
+# files url list
+print(files$download_url)
+
+# result
+# content(response, "text")
+```
+### 2. Reading Sample Txt File
+
+```{r}
+# 특정 파일의 RAW URL (data 브랜치)
+file_url <- "https://raw.githubusercontent.com/yinwo55/S610-Final-Project/refs/heads/main/Outdegmat.txt?token=GHSAT0AAAAAAC2KULF4VIUCEHAIJLKBA5NYZ2CDYHQ"
+
+# CSV 파일 읽기
+Outdegmat <- read.csv(file_url, header = TRUE)
+
+
+Outdegmat[c(1195, 7907),]
+```
+
+### 3. Drawing Figure 1
+
+<ul>
+  <li>First column's case cite second column's case</li>
+</ul>
+
+```{r, include = FALSE}
+all_cite_url <- "https://raw.githubusercontent.com/yinwo55/S610-Final-Project/refs/heads/main/Allcites.txt?token=GHSAT0AAAAAAC2KULF57JMLNKKWJVMDWH54Z2CDYUQ"
+token <- "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"
+
+# GET 요청
+response <- GET(all_cite_url, add_headers(Authorization = paste("token", token)))
+
+# 파일 내용 읽기
+file_content <- content(response, "text")
+```
+
+```{r}
+allcite <- read.csv(all_cite_url, header = FALSE, sep = " ")
+
+head(allcite)
+```
+
+<b>(1)Roe v. Wade</b> 
+
+```{r}
+Roe_v_wade <- allcite %>% 
+  filter(V2 == 25347)
+
+Roe_v_wade
+```
+
+**(2)Roe v. Wade and its four landmark abortion decisions.**
+
+```{r}
+judicial_csv <- "https://raw.githubusercontent.com/yinwo55/S610-Final-Project/refs/heads/main/judicial.csv?token=GHSAT0AAAAAAC2KULF5LNB3E24U5IBOKLDUZ2CDZPQ"
+
+cases <- read.csv(judicial_csv, header = TRUE)
+head(cases)
+```
+
+```{r}
+abor_landmark <- cases %>%
+  filter(usid %in% c("492US490", "505US833", "476US747", "462US416", "410US113")
+  )
+
+abor_landmark
+```
+
+```{r}
+Roe_v_wade_five <- allcite %>% 
+  filter(V1 %in% c(27633, 28354, 29003, 29459), V2 %in% c(25347, 27633, 28354, 29003, 29459))
+
+Roe_v_wade_five
+```
+
+
+```{r}
+# 데이터프레임을 edgelist로 변환
+edges <- Roe_v_wade_five
+
+# 올바른 노드 매칭 데이터
+nodes <- data.frame(
+  name = c(25347, 27633, 28354, 29003, 29459),  # Case IDs
+  label = c(
+    "Roe v. Wade", 
+    "City of Akron v. Akron Ctr.", 
+    "Thornburgh v. American College", 
+    "Webster v. Reproductive Health", 
+    "Planned Parenthood v. Casey"  # Correct labels
+  )
+)
+```
+```{r}
+# 노드 이름과 ID를 자동 매핑
+nodes_test <- data.frame(
+  name = unique(c(Roe_v_wade_five$V1, Roe_v_wade_five$V2)),  # 모든 고유 caseid 추출
+  label = cases$parties[match(unique(c(Roe_v_wade_five$V1, Roe_v_wade_five$V2)), cases$caseid)]  # caseid로 이름 매칭
+)
+
+# 그래프 객체 생성
+graph <- graph_from_data_frame(edges, vertices = nodes_test, directed = TRUE)
+
+V(graph)$name <- nodes_test$label
+#V(graph)
+
+
+
+# 그래프 확인
+#print(graph)
+#print(edges)
+print(nodes_test)
+
+```
+
+
+```{r}
+# 그래프 데이터 준비
+graph_tbl <- as_tbl_graph(graph)  # igraph 객체를 tbl_graph로 변환
+
+# ggraph로 시각화
+ggraph(graph_tbl, layout = "circle") +   # 원형 레이아웃 설정
+  geom_edge_link(                       # 엣지 그리기
+    arrow = arrow(type = "closed", length = unit(3, 'mm')), 
+    end_cap = circle(2, 'mm'),
+    color = "black"
+  ) +
+  geom_node_point(                      # 노드 그리기
+    size = 7, 
+    color = "gray"
+  ) +
+  geom_node_text(                       # 노드 라벨 그리기
+    aes(label = name),                  # 이름을 라벨로 표시
+    repel = TRUE,                       # 라벨이 노드와 겹치지 않게 조정
+    size = 2,                           # 라벨 크기
+    color = "black"
+  ) +
+  theme_void() # 배경 제거거
+```
+
+### 4. Description
+
+
+I confirmed that no. cases in dataset and the number of cases mentioned in the article match. 
+
+```{r}
+nrow(cases)
+```
+
+```{r}
+cases_description <- cases %>%
+  select(indeg, outdeg, hub, auth, between, incent) %>%
+  summary()
+
+cases_description
+```
+##### Network Glimpse
+
+When I filtered `indeg > 100`, I found the number in `overruled` is `caseid`.
+
+```{r}
+cases_indeg <- cases %>% 
+  filter(indeg > 100)
+head(cases_indeg)
+```
+
+To verify whether it is `caseid`, I filtered `caseid` 1195 and 7907. I verified that the numbers in `overruled` and `overruling` are `caseid` 
+
+```{r}
+cases_test <- cases %>% 
+  filter(caseid %in% c(1195, 7907))
+```
+
+
+
