@@ -306,6 +306,9 @@ ggplot(filtered_df_10, aes(x = year, y = authority_score, linetype = case_id)) +
 ######## Authority score testing by Using testthat
 ##########################################################
 
+                                                     
+## An Alternative Way to Calculate Hub and Authority Scores      
+                                                     
 # create case_year_map 
 case_year_map <- setNames(judicial$year, judicial$caseid)
 
@@ -390,8 +393,11 @@ cases_of_interest_testing <- cases_of_interest_testing %>%
 
 head(cases_of_interest_testing)
 
-## Testing
 
+
+                                                     
+## Testing 1
+## Our computation with original data
 library(testthat)
                                                      
 # Filter df for the Figure 6 cases
@@ -449,3 +455,38 @@ test_that("Authority scores match up to 3 decimal places, skipping NA values", {
   }
 })
 
+
+## Testing 2
+## Comparison of Authority Scores Computed Using Different Approaches
+                                                                                                   
+# Define a function to test matching authority scores between two data frames
+test_that("Authority scores match between filtered_df and cases_of_interest_testing", {
+  
+  # Loop through each row of filtered_df
+  for (i in 1:nrow(filtered_df)) {
+    year <- filtered_df$year[i]
+    caseid <- filtered_df$case_id[i]
+    auth_score <- filtered_df$authority_score[i]
+    
+    # Find the corresponding row in cases_of_interest_testing
+    matching_row <- cases_of_interest_testing[
+      cases_of_interest_testing$year == year & 
+      cases_of_interest_testing$caseid == caseid, ]
+    
+    # Check if matching row exists and skip if not found
+    if (nrow(matching_row) == 0) {
+      next
+    }
+    
+    # Perform the test with tolerance for 3 decimal places
+    expect_equal(
+      auth_score,
+      matching_row$authority_score,
+      tolerance = 1e-3,
+      info = paste("Mismatch at caseid:", caseid, "year:", year)
+    )
+  }
+})
+
+
+                                                     
