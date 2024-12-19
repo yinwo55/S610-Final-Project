@@ -1,2 +1,7 @@
 # S610 Final Project
- S610 Final Project
+This is an acknowledgment that all three of us participated in the project. We had weekly meetings. We tried to replicate Figures 1-4, 6, and 10 individually to ensure everyone understands the existing article and data structure. These figures were checked in weekly meetings. For Figures 1-4, we were able to recreate the graphs, but for Figures 6 and 10, each of us faced different challenges. In our weekly meetings, we discussed possible approaches and Inwoo suggested different methods using matrix and Hyperlink-Induced Topic Search (HITS) algorithm. After testing his code, Joohyun merged year information in judicial.csv with allcites.txt, to partition the network to cases per year. Gyuri found an error with Joohyun’s code where the year information of the cited cases is missing. After fixing this error, we used the for loop to practice Inwoo’s idea of using HITS algorithms. As a first trial, Gyuri made code combining two data frames of judicial and allcites and then computing hub and authority scores of input caseid per year. By using `testthat()`, we tested whether the output authority scores from the code match with the scores in the authmat.txt file. In addition, Joohyun computed another code that maps year information with allcites without merging for testrging. Using `testthat()` again, we confirmed that both of our codes produce the same authority scores. All these processes are reflected in GitHub.
+
+## Branches
+- main: contains original dataset
+- authority-score-calculation: contains our final code to calculate authority scores with testing
+- miscellaneous: contains each student's code to calculate authority scores and plot Figs. 1-4, 6, 10
