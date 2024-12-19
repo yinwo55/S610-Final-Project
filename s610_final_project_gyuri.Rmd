@@ -1,5 +1,6 @@
 ---
 title: "S610 Final Project"
+author: "Gyuri Kang"
 output:
   html_document:
     df_print: paged
